@@ -15,8 +15,8 @@
 # NixOS enforces `config.assertions` when `system.build.toplevel` is forced; a bare read of
 # `config.assertions` is a passive list that no evaluator has to act on. Composing through
 # eval-config.nix is therefore the cheapest way to get an assertion to actually FAIL, which is the
-# thing under test. It is not a claim that nixiac needs a host -- see checks/purity.nix, which
-# proves the opposite about the same modules.
+# thing under test. It is not a claim that nixiac needs a host -- see checks/default.nix's own
+# `nixtest.lib.mkPurityChecks` calls, which prove the opposite about the same modules.
 { lib, nixpkgs, system, controlPlaneModule, bareStubs }:
 
 let

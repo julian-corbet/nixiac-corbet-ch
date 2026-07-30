@@ -4,13 +4,14 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # NOTHING ELSE, and in particular no other nix* repo in this family -- not the module that owns
-    # the cluster this control plane will run on, and not the one that owns the workloads beside it.
-    # A control plane is a thing a consumer composes ALONGSIDE those, not a thing that depends on
-    # them, and an input here would make the composition order a fact about this repo rather than
-    # about the consumer. Where nixiac needs to know something a sibling declares, it reads the
-    # option defensively (`config.<sibling>.<x> or null`) so that the module keeps working on a
-    # consumer that never imported it -- see modules/control-plane.nix's own read of
+    # NOTHING that renders or runs alongside this control plane -- in particular no other nix*
+    # PRODUCT repo -- not the module that owns the cluster this control plane runs on, and not the
+    # one that owns the workloads beside it. A control plane is a thing a consumer composes
+    # ALONGSIDE those, not a thing that depends on them, and an input here would make the
+    # composition order a fact about this repo rather than about the consumer. Where nixiac needs
+    # to know something a sibling declares, it reads the option defensively
+    # (`config.<sibling>.<x> or null`) so that the module keeps working on a consumer that never
+    # imported it -- see modules/control-plane.nix's own read of
     # `config.nixiac.activation.enable or false` for the in-repo version of the same pattern, and
     # `checks/` for that read being proven in both states rather than assumed.
     #
@@ -18,9 +19,24 @@
     # attrset of plain Kubernetes objects; JSON is a strict subset of YAML 1.2, so any renderer,
     # any client, and any human already accepts them without this repo depending on a particular
     # one. See modules/manifests.nix's own header.
+    #
+    # nixtest IS taken as an input, and it is a different category of thing entirely: a lib-only
+    # TEST FIXTURE (see that repo's own README -- "no NixOS module, no `enable`, nothing that acts
+    # on a host"), never a runner, never composed into anything this flake exports. `checks/purity.nix`
+    # used to carry its own hand-derived copy of `nixtest.lib.mkPurityChecks`, and that copy
+    # quietly stopped matching the original (it proved the whole module GROUP eval-pure, never each
+    # module ALONE, so `modules/manifests.nix` composed on its own -- the one way this repo's own
+    # README says it may legitimately be imported -- was never actually eval-diffed at all). A
+    # fixture that has drifted into a weaker proof and still reads as "the purity check passing" is
+    # worse than no check, because it stops anyone from looking. One recipe, taken as a dependency,
+    # cannot drift from itself.
+    nixtest = {
+      url = "github:julian-corbet/nixtest-corbet-ch";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, nixtest }:
     let
       lib = nixpkgs.lib;
       supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
@@ -75,8 +91,9 @@
       # because a host that RENDERS GitOps artifacts is a perfectly ordinary
       # place to import them), not because a host is required. A GitOps
       # renderer, or a bare `lib.evalModules`, is an equally valid
-      # evaluator -- and `checks/purity.nix` proves the claim that makes that
-      # true, by showing these modules change no host-only surface at all.
+      # evaluator -- and `checks/` proves the claim that makes that true (via
+      # nixtest's shared `lib.mkPurityChecks` fixture), by showing these
+      # modules change no host-only surface at all.
       modules = {
         controlPlane = ./modules/control-plane.nix;
         activation = ./modules/activation.nix;
@@ -117,7 +134,7 @@
       checks = forAllSystems (system:
         import ./checks {
           pkgs = pkgsFor system;
-          inherit lib nixpkgs system;
+          inherit lib nixpkgs system nixtest;
           controlPlaneModule = self.nixosModules.controlPlane;
           activationModule = self.nixosModules.activation;
           manifestsModule = self.nixosModules.manifests;

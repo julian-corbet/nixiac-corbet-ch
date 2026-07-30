@@ -29,9 +29,11 @@ module system is uniquely good at and a plain function is bad at:
 What the module system is *not* used for here is `config` in the NixOS sense.
 These modules write no host option, which is why `flake.nix` also exports
 them as `modules.*` — the same three files under a name that does not claim a
-host — and why `checks/purity.nix` proves the claim mechanically instead of
-asserting it in prose. A GitOps renderer, or a bare `lib.evalModules`, is an
-equally valid evaluator.
+host — and why that claim is proven mechanically, via
+[nixtest](https://github.com/julian-corbet/nixtest-corbet-ch)'s shared
+`lib.mkPurityChecks` fixture (see `checks/default.nix`), instead of asserted
+in prose. A GitOps renderer, or a bare `lib.evalModules`, is an equally valid
+evaluator.
 
 `lib.mkManagedResource` is the one thing that is deliberately *not* a module,
 for the mirror-image reason: it is called from inside somebody else's render
@@ -159,10 +161,12 @@ Three consequences that shaped the check files:
   builds fine" check is listed at the top, because if the base fixture is
   itself broken then every negative check in that group is proving nothing,
   and that should be the first line of the report.
-- **Meta-tests, wherever a comparison could be vacuous.** `checks/purity.nix`
-  composes a decoy module that genuinely binds `pkgs`, genuinely adds a
-  systemd unit and genuinely installs a package, so each comparison is shown
-  capable of failing rather than merely observed not to fail today.
+- **Meta-tests, wherever a comparison could be vacuous.** nixtest's shared
+  `lib.mkPurityChecks` fixture (called three times in `checks/default.nix`,
+  once per module file) composes a decoy module that genuinely binds `pkgs`,
+  genuinely adds a systemd unit and genuinely installs a package, so each
+  comparison is shown capable of failing rather than merely observed not to
+  fail today.
 - **Fixtures are built, not merged, when a field must be ABSENT.**
   `lib.recursiveUpdate` merges, so `removeAttrs` on a provider hands back an
   attrset whose missing field is then re-supplied by the merge. Both mistakes

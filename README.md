@@ -42,19 +42,24 @@ repo — not tool preference, and not Nix purity. Everything else here
 follows from it:
 
 - **Facts, never mechanism.** Nothing in this repo ships a systemd unit,
-  touches a host, or produces a derivation. `checks/purity.nix` proves that
-  mechanically rather than promising it, and every proof there ships with a
-  decoy that genuinely commits the violation, so the proof is shown capable
-  of failing.
+  touches a host, or produces a derivation. Proven mechanically rather than
+  promised, via [nixtest](https://github.com/julian-corbet/nixtest-corbet-ch)'s
+  shared `lib.mkPurityChecks` fixture — called once per module file so that
+  each is proven pure *alone*, not merely as a group — and every proof there
+  ships with a decoy that genuinely commits the violation, so the proof is
+  shown capable of failing.
 - **Plain data out, not rendered YAML.** Serialising to YAML would need a
   tool, which needs `pkgs`, which would make these facts unreadable without
   a build behind them. JSON is a strict subset of YAML 1.2, so
   `builtins.toJSON` of each object is a document every Kubernetes client
   already accepts.
-- **No flake input on any sibling.** Where nixiac needs to know something
-  another module declares, it reads the option defensively
+- **No flake input on any sibling PRODUCT.** Where nixiac needs to know
+  something another module declares, it reads the option defensively
   (`config.<x> or null`) — so the module keeps working on a consumer that
-  never imported the sibling.
+  never imported the sibling. The one flake input this repo does take,
+  `nixtest`, is a different category of thing: a lib-only test fixture,
+  never composed into anything this flake exports — see flake.nix's own
+  `inputs` for why that does not weaken the rule.
 
 ## The three modules
 
@@ -417,7 +422,7 @@ else.
 | `lib/managed-resource.nix` | the Nix → Crossplane-CR rendering shape, with the inverted defaults stamped on |
 | `lib/management-actions.nix` | the vocabulary table: accepted enum, intent-required subset, rejected names with reasons |
 | `examples/control-plane/` | a minimal composed system exercising every implemented option, used by `nix flake check` |
-| `checks/` | every assertion proven in both directions, plus a mechanical purity proof with meta-tests |
+| `checks/` | every assertion proven in both directions, plus a mechanical purity proof (via nixtest's shared fixture) with meta-tests |
 | `docs/design.md` | the reasoning settled well enough to state as a decision |
 | `experiments/` | open questions and unmeasured defaults |
 | `studies/` | write-ups, including the CRD-footprint measurements |
@@ -427,7 +432,7 @@ else.
 
 **Pre-alpha, and honest about which parts have run.** All three modules and
 both lib functions are real and checked in: schema, eval-time assertions,
-and plain-data rendering, with 152 eval-time checks covering every assertion
+and plain-data rendering, with 169 eval-time checks covering every assertion
 in both directions plus a mechanical purity proof.
 
 What has **not** happened yet, stated plainly rather than glossed over:
@@ -462,11 +467,13 @@ What has **not** happened yet, stated plainly rather than glossed over:
 ## Related projects
 
 `nixiac` is one of several small, independently-usable open-source projects
-sharing a common design system. It takes **no flake input on any of them** —
-a control plane is something a consumer composes *alongside* its cluster and
-its workloads, not something that depends on them, and an input here would
-make the composition order a fact about this repo rather than about the
-consumer.
+sharing a common design system. It takes **no flake input on any product
+repo in the family** — a control plane is something a consumer composes
+*alongside* its cluster and its workloads, not something that depends on
+them, and an input here would make the composition order a fact about this
+repo rather than about the consumer. (It does take `nixtest` as an input —
+a lib-only test fixture, not a product; see "Why the control plane belongs
+in Nix" above.)
 
 - [nixk3s](https://github.com/julian-corbet/nixk3s-corbet-ch) — the cluster
   this control plane runs *on*: bare-metal k3s on NixOS with a declarative

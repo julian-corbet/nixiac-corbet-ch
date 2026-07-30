@@ -19,7 +19,8 @@
 # every comment away; importing a plain-data .nix file costs ~0.021 s and keeps the prose. Three
 # orders of magnitude, for the same fact. So this module publishes facts, and refuses to publish
 # mechanism -- see `modules/manifests.nix` for what "publishes facts" means concretely, and
-# `checks/purity.nix` for that claim being proven rather than asserted.
+# `checks/default.nix`'s `nixtest.lib.mkPurityChecks` calls for that claim being proven rather
+# than asserted.
 #
 # ── WHAT THIS MODULE DOES NOT OWN, STATED BEFORE WHAT IT DOES ──────────────────────────────────
 #

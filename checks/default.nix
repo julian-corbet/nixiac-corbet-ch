@@ -16,11 +16,17 @@
 #                            required external name, the vocabulary check with its rejected-name
 #                            hints, the intent gate, and the scope/deletionPolicy interaction that
 #                            is the easiest thing in this repo to get quietly wrong.
-#   ./purity.nix          -- the claim the rest of the repo rests on, proven mechanically: these
-#                            modules touch no host surface, so they can be evaluated by something
-#                            that is not NixOS, and the facts they publish can be read without
-#                            dragging a build in behind them. Every proof there ships with a
-#                            meta-test.
+#   nixtest.lib.mkPurityChecks -- the claim the rest of the repo rests on, proven mechanically:
+#                            these modules touch no host surface, so they can be evaluated by
+#                            something that is not NixOS, and the facts they publish can be read
+#                            without dragging a build in behind them. Called once per module file
+#                            (control-plane, activation, manifests) rather than once for the group,
+#                            so each is proven pure ALONE -- including manifests.nix on its own,
+#                            which is the one way this repo's own README says a consumer may
+#                            legitimately import it, and which this repo's own former hand-rolled
+#                            copy of this fixture never actually composed by itself at all. Every
+#                            proof ships with a meta-test. See flake.nix's own `inputs` for why this
+#                            is a flake input rather than another hand-derived copy.
 #
 # NOTHING HERE BUILDS OR BOOTS ANYTHING, and that is a property of the repo rather than a shortcut:
 # nixiac renders plain data, so "did it validate" and "did it render the right object" are both
@@ -34,13 +40,13 @@
 # base fixture exists, its "must build fine" check is listed first on purpose: if the base fixture is
 # itself broken, every negative check in that group is proving nothing, and that failure should be
 # the first line of the report.
-{ pkgs, lib, nixpkgs, system, controlPlaneModule, activationModule, manifestsModule, mkManagedResource }:
+{ pkgs, lib, nixpkgs, system, nixtest, controlPlaneModule, activationModule, manifestsModule, mkManagedResource }:
 
 let
   # Shared by every NixOS-eval fixture in this directory -- one definition, so that no check group's
-  # "bare" baseline can silently drift away from the baseline the others use. In particular
-  # ./purity.nix's eval diff compares against exactly this, and a per-group copy of it would make
-  # that diff measure the copies rather than the modules.
+  # "bare" baseline can silently drift away from the baseline the others use. In particular each
+  # `nixtest.lib.mkPurityChecks` call below diffs against exactly this, and a per-call copy of it
+  # would make that diff measure the copies rather than the modules.
   bareStubs = {
     boot.loader.grub.enable = false;
     fileSystems."/" = { device = "none"; fsType = "tmpfs"; };
@@ -59,15 +65,81 @@ let
     inherit lib mkManagedResource;
   };
 
-  purityChecks = import ./purity.nix {
-    inherit lib nixpkgs system controlPlaneModule activationModule manifestsModule bareStubs;
+  # ── Purity, per module file, each composed ALONE against the bare stub ──────────────────────────
+  # Three separate calls rather than one call over the group: `mkPurityChecks`'s own load-bearing
+  # half (the eval diff) proves a module composed BY ITSELF changes no watched host surface, and a
+  # group-only proof would never actually exercise `manifestsModule` without the other two -- the
+  # one composition this repo's own README promises works ("a consumer that wants only the output
+  # surface can import it alone").
+  controlPlanePurity = nixtest.lib.mkPurityChecks {
+    inherit lib nixpkgs system bareStubs;
+    label = "control-plane";
+    modulePath = controlPlaneModule;
+    # A realistic, non-default use of control-plane's OWN options only -- deliberately no
+    # `nixiac.activation`, so this run also stands in as proof that the module's defensive read of
+    # `config.nixiac.activation.enable or false` (see modules/control-plane.nix's own header) keeps
+    # working with the activation module entirely absent from the composition.
+    populatedConfig = {
+      nixiac = {
+        enable = true;
+        version = "v2.3.4";
+        providers.example = {
+          package = "xpkg.crossplane.io/example-org/provider-example";
+          version = "v1.0.0";
+          providerConfigApiVersion = "example.crossplane.io/v1beta1";
+          providerConfigSpec = { projectID = "a-consumer-specific-identifier"; };
+          credentialsSecret = { name = "example-credentials"; namespace = "crossplane-system"; key = "credentials"; };
+        };
+      };
+    };
+    # Both facts control-plane.nix itself renders: `manifests` only once `enable` and a complete
+    # provider make it render something, `helmRelease` unconditionally (see that option's own
+    # header for why it has no default).
+    factPaths = [ "nixiac.manifests" "nixiac.helmRelease" ];
   };
+
+  activationPurity = nixtest.lib.mkPurityChecks {
+    inherit lib nixpkgs system bareStubs;
+    label = "activation";
+    modulePath = activationModule;
+    # activation.nix's own options only -- control-plane.nix is not part of this composition at
+    # all, which is exactly the standalone-import case its own header describes.
+    populatedConfig = {
+      nixiac.activation = {
+        enable = true;
+        activate = [ "examples.example.crossplane.io" ];
+      };
+    };
+    # `nixiac.helmRelease` is not in this list on purpose: that option is declared by
+    # control-plane.nix, which this composition does not import, so it is not readable here at all.
+    factPaths = [ "nixiac.manifests" ];
+  };
+
+  manifestsPurity = nixtest.lib.mkPurityChecks {
+    inherit lib nixpkgs system bareStubs;
+    label = "manifests";
+    modulePath = manifestsModule;
+    # A CONSUMER adding its own object directly -- manifests.nix's own header names this as a
+    # genuinely supported use ("a consumer may add its own objects here"), and it is the only
+    # non-default use this module's options admit on their own, with neither of its two real
+    # callers imported.
+    populatedConfig = {
+      nixiac.manifests.example = {
+        apiVersion = "v1";
+        kind = "ConfigMap";
+        metadata.name = "example";
+      };
+    };
+    factPaths = [ "nixiac.manifests" ];
+  };
+
+  purityResults = controlPlanePurity ++ activationPurity ++ manifestsPurity;
 
   results =
     controlPlaneChecks.results
     ++ activationChecks.results
     ++ managedResourceChecks.results
-    ++ purityChecks.results;
+    ++ purityResults;
 
   failed = builtins.filter (r: !r.ok) results;
   report = lib.concatMapStringsSep "\n" (r: "  - ${r.name}: ${r.detail}") failed;
