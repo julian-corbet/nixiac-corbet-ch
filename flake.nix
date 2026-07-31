@@ -22,14 +22,13 @@
     #
     # nixtest IS taken as an input, and it is a different category of thing entirely: a lib-only
     # TEST FIXTURE (see that repo's own README -- "no NixOS module, no `enable`, nothing that acts
-    # on a host"), never a runner, never composed into anything this flake exports. `checks/purity.nix`
-    # used to carry its own hand-derived copy of `nixtest.lib.mkPurityChecks`, and that copy
-    # quietly stopped matching the original (it proved the whole module GROUP eval-pure, never each
-    # module ALONE, so `modules/manifests.nix` composed on its own -- the one way this repo's own
-    # README says it may legitimately be imported -- was never actually eval-diffed at all). A
-    # fixture that has drifted into a weaker proof and still reads as "the purity check passing" is
-    # worse than no check, because it stops anyone from looking. One recipe, taken as a dependency,
-    # cannot drift from itself.
+    # on a host"), never a runner, never composed into anything this flake exports. A hand-derived
+    # copy of `nixtest.lib.mkPurityChecks` in `checks/purity.nix` could silently drift into a
+    # weaker proof (e.g. eval-pure as a module GROUP, never each module ALONE -- so
+    # `modules/manifests.nix` composed on its own, the one way this repo's own README says it may
+    # legitimately be imported, would never actually be eval-diffed) while still reading as "the
+    # purity check passing", which is worse than no check because it stops anyone from looking.
+    # One recipe, taken as a dependency, cannot drift from itself.
     nixtest = {
       url = "github:julian-corbet/nixtest-corbet-ch";
       inputs.nixpkgs.follows = "nixpkgs";

@@ -23,10 +23,9 @@
 #                            (control-plane, activation, manifests) rather than once for the group,
 #                            so each is proven pure ALONE -- including manifests.nix on its own,
 #                            which is the one way this repo's own README says a consumer may
-#                            legitimately import it, and which this repo's own former hand-rolled
-#                            copy of this fixture never actually composed by itself at all. Every
-#                            proof ships with a meta-test. See flake.nix's own `inputs` for why this
-#                            is a flake input rather than another hand-derived copy.
+#                            legitimately import it. Every proof ships with a meta-test. See
+#                            flake.nix's own `inputs` for why this is a flake input rather than a
+#                            hand-derived copy.
 #
 # NOTHING HERE BUILDS OR BOOTS ANYTHING, and that is a property of the repo rather than a shortcut:
 # nixiac renders plain data, so "did it validate" and "did it render the right object" are both
