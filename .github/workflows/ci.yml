@@ -26,7 +26,7 @@ jobs:
   check:
     name: nix flake check (${{ matrix.system }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 12
     strategy:
       # GitHub cancels every other matrix leg the moment one fails, by default. That default is
       # exactly backwards: the point of a per-system matrix is that each system reports its own
